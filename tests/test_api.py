@@ -90,3 +90,13 @@ def test_requires_api_key_for_signals():
     c = client()
     response = c.post("/v1/signals", json={"kind": "engineering", "source": "ci", "name": "deploys", "value": 3})
     assert response.status_code == 401
+
+
+def test_system_aliases_are_railway_friendly():
+    c = client()
+    assert c.get("/").status_code == 200
+    assert c.get("/api").json()["api_prefix"] == "/v1"
+    assert c.get("/api/health").json()["status"] == "ok"
+    assert c.get("/status").json()["status"] == "ok"
+    assert c.get("/ping").json()["status"] == "ok"
+    assert c.get("/version").json()["version"] == "0.1.0"

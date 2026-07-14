@@ -1,6 +1,7 @@
 from datetime import datetime
 
-from fastapi import APIRouter, Depends
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -87,7 +88,23 @@ def ingest_signal(payload: SignalIn, startup: Startup = Depends(require_startup)
 
 @router.post("/connectors/github/public-repository", tags=["connectors"])
 async def ingest_github_repo(payload: GitHubRepositoryIn, startup: Startup = Depends(require_startup), db: Session = Depends(get_db)):
-    raw_signals = await fetch_public_repo_signals(payload.owner, payload.repo)
+    try:
+        raw_signals = await fetch_public_repo_signals(payload.owner, payload.repo)
+    except httpx.HTTPStatusError as exc:
+        status_code = status.HTTP_404_NOT_FOUND if exc.response.status_code == 404 else status.HTTP_502_BAD_GATEWAY
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "message": "GitHub metadata connector failed.",
+                "github_status_code": exc.response.status_code,
+                "url": str(exc.request.url),
+            },
+        ) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail={"message": "GitHub metadata connector could not reach GitHub.", "error": str(exc)},
+        ) from exc
     created = []
     for item in raw_signals:
         metadata = item.pop("metadata")

@@ -142,3 +142,9 @@ curl -X POST "https://<your-railway-domain>/v1/startups" \
 curl "https://<your-railway-domain>/v1/security/data-inventory" \
   -H "Authorization: Bearer <scout_api_key>"
 ```
+
+## Railway smoke-test endpoints
+
+Railway and browsers may probe `/`, `/api`, `/api/health`, `/status`, `/ping`, and `/version`. Scout now returns friendly JSON for those paths instead of `404`, while the canonical health check remains `/health`.
+
+The GitHub connector follows GitHub redirects and returns a structured `404` or `502` error if GitHub cannot return metadata, instead of leaking an internal server error.

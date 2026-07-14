@@ -16,7 +16,11 @@ async def fetch_public_repo_signals(owner: str, repo: str) -> list[dict]:
     base = f"https://api.github.com/repos/{owner}/{repo}"
     timeout = get_settings().github_timeout_seconds
     observed_at = datetime.utcnow()
-    async with httpx.AsyncClient(timeout=timeout, headers={"Accept": "application/vnd.github+json"}) as client:
+    async with httpx.AsyncClient(
+        timeout=timeout,
+        follow_redirects=True,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "Scout-Backend"},
+    ) as client:
         repo_resp = await client.get(base)
         repo_resp.raise_for_status()
         repo_data = repo_resp.json()
