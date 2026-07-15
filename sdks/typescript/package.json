@@ -1,0 +1,17 @@
+{
+  "name": "@scout/execution",
+  "version": "0.1.0",
+  "description": "Scout Execution Intelligence SDK",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  },
+  "files": ["dist", "README.md"],
+  "keywords": ["scout", "execution", "investor", "startup", "evidence"],
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
