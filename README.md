@@ -209,3 +209,25 @@ Scout.monitor()
 ```
 
 That sends `application_started`, periodic `application_heartbeat`, and unhandled `application_error` signals automatically. For business-specific proof such as revenue, customers, or manufacturing milestones, teams should still connect trusted webhooks/OAuth connectors or call `track(...)` from backend jobs where those events happen.
+
+## Automatic request monitoring from their code
+
+This is the "add the API to their code and Scout monitors automatically" path. The SDK does not read source code. It observes runtime metadata from the app where it is installed.
+
+TypeScript / Express:
+
+```ts
+import { Scout } from "@scout/execution";
+const scout = Scout.monitor();
+app.use(scout.httpMiddleware());
+```
+
+Python / FastAPI:
+
+```python
+from scout_execution import Scout
+scout = Scout.monitor()
+scout.instrument_fastapi(app)
+```
+
+This automatically sends app lifecycle, heartbeat, unhandled errors, HTTP request latency, route/path, method, status code, and success/error metadata into Scout. For revenue, customer, manufacturing, compliance, or finance proof, the app should call `track(...)` where those events happen or use a connector/webhook.

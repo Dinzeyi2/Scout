@@ -21,8 +21,16 @@ export interface AutoMonitorOptions {
   environment?: string;
   heartbeatIntervalMs?: number;
   captureErrors?: boolean;
+  captureHttp?: boolean;
   metadata?: Record<string, unknown>;
 }
+
+type HttpRequestLike = { method?: string; path?: string; url?: string; route?: { path?: string } };
+type HttpResponseLike = {
+  statusCode?: number;
+  on?: (event: string, handler: () => void) => void;
+};
+type NextFunction = () => void;
 
 export interface SignalInput {
   kind: SignalKind;
@@ -141,6 +149,54 @@ export class Scout {
       proc?.on?.("unhandledRejection", (error: unknown) => {
         void this.captureError(error, { ...metadata, error_type: "unhandledRejection" });
       });
+    }
+  }
+
+  httpMiddleware(metadata: Record<string, unknown> = {}) {
+    return (req: HttpRequestLike, res: HttpResponseLike, next: NextFunction): void => {
+      const startedAt = Date.now();
+      res.on?.("finish", () => {
+        const statusCode = res.statusCode ?? 0;
+        const route = req.route?.path ?? req.path ?? req.url ?? "unknown";
+        void this.track({
+          kind: "infrastructure",
+          source: "scout_sdk",
+          name: "http_request",
+          value: Date.now() - startedAt,
+          unit: "ms",
+          verification_status: "attested",
+          source_event_id: `scout-sdk-http-${Date.now()}`,
+          metadata: {
+            method: req.method ?? "unknown",
+            route,
+            status_code: statusCode,
+            success: statusCode < 500,
+            ...metadata,
+          },
+        }).catch(() => undefined);
+      });
+      next();
+    };
+  }
+
+  async monitorFunction<T>(name: string, fn: () => Promise<T> | T, metadata: Record<string, unknown> = {}): Promise<T> {
+    const startedAt = Date.now();
+    try {
+      const result = await fn();
+      await this.track({
+        kind: "operations",
+        source: "scout_sdk",
+        name: "function_completed",
+        value: Date.now() - startedAt,
+        unit: "ms",
+        verification_status: "attested",
+        source_event_id: `scout-sdk-function-${name}-${Date.now()}`,
+        metadata: { function_name: name, success: true, ...metadata },
+      });
+      return result;
+    } catch (error) {
+      await this.captureError(error, { function_name: name, ...metadata });
+      throw error;
     }
   }
 

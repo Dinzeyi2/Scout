@@ -6,14 +6,20 @@ Add this once to your backend/server entrypoint. Scout will automatically send a
 
 ```ts
 import { Scout } from "@scout/execution";
-Scout.monitor();
+const scout = Scout.monitor();
 ```
 
-## 3-line custom evidence
+## Express / Node API monitoring
 
 ```ts
-import { Scout } from "@scout/execution";
-const scout = Scout.fromEnv();
+app.use(scout.httpMiddleware());
+```
+
+That automatically sends request latency, route, method, status code, and error signals as operational metadata. It does not send source code.
+
+## Custom business evidence
+
+```ts
 await scout.track({ kind: "revenue", source: "stripe", name: "monthly_recurring_revenue", value: 12000, unit: "USD", verification_status: "verified" });
 ```
 

@@ -154,6 +154,108 @@ class Scout:
         except Exception:
             return
 
+
+    def asgi_middleware(self, app: Any, metadata: dict[str, Any] | None = None) -> Any:
+        scout = self
+        base_metadata = metadata or {}
+
+        async def middleware(scope: dict[str, Any], receive: Any, send: Any) -> None:
+            if scope.get("type") != "http":
+                await app(scope, receive, send)
+                return
+
+            started_at = time.time()
+            status_code: int | None = None
+
+            async def send_wrapper(message: dict[str, Any]) -> None:
+                nonlocal status_code
+                if message.get("type") == "http.response.start":
+                    status_code = message.get("status")
+                await send(message)
+
+            try:
+                await app(scope, receive, send_wrapper)
+            except Exception as exc:
+                self.capture_error(exc, {**base_metadata, "path": scope.get("path"), "method": scope.get("method")})
+                raise
+            finally:
+                duration_ms = round((time.time() - started_at) * 1000, 2)
+                scout._safe_track(
+                    kind="infrastructure",
+                    source="scout_sdk",
+                    name="http_request",
+                    value=duration_ms,
+                    unit="ms",
+                    verification_status="attested",
+                    source_event_id=f"scout-sdk-http-{int(time.time() * 1000)}",
+                    metadata={
+                        "method": scope.get("method"),
+                        "path": scope.get("path"),
+                        "status_code": status_code,
+                        "success": (status_code or 500) < 500,
+                        **base_metadata,
+                    },
+                )
+
+        return middleware
+
+    def instrument_fastapi(self, app: Any, metadata: dict[str, Any] | None = None) -> None:
+        scout = self
+        base_metadata = metadata or {}
+
+        @app.middleware("http")
+        async def scout_middleware(request: Any, call_next: Any) -> Any:
+            started_at = time.time()
+            try:
+                response = await call_next(request)
+            except Exception as exc:
+                scout.capture_error(
+                    exc,
+                    {
+                        **base_metadata,
+                        "path": str(request.url.path),
+                        "method": request.method,
+                    },
+                )
+                raise
+            duration_ms = round((time.time() - started_at) * 1000, 2)
+            scout._safe_track(
+                kind="infrastructure",
+                source="scout_sdk",
+                name="http_request",
+                value=duration_ms,
+                unit="ms",
+                verification_status="attested",
+                source_event_id=f"scout-sdk-http-{int(time.time() * 1000)}",
+                metadata={
+                    "method": request.method,
+                    "path": str(request.url.path),
+                    "status_code": response.status_code,
+                    "success": response.status_code < 500,
+                    **base_metadata,
+                },
+            )
+            return response
+
+    def monitor_function(self, name: str, fn: Any, metadata: dict[str, Any] | None = None) -> Any:
+        started_at = time.time()
+        try:
+            result = fn()
+        except Exception as exc:
+            self.capture_error(exc, {"function_name": name, **(metadata or {})})
+            raise
+        self._safe_track(
+            kind="operations",
+            source="scout_sdk",
+            name="function_completed",
+            value=round((time.time() - started_at) * 1000, 2),
+            unit="ms",
+            verification_status="attested",
+            source_event_id=f"scout-sdk-function-{name}-{int(time.time() * 1000)}",
+            metadata={"function_name": name, "success": True, **(metadata or {})},
+        )
+        return result
+
     def track(self, *, kind: SignalKind, source: str, name: str, value: float, unit: str = "count", verification_status: VerificationStatus = "self_reported", source_event_id: str | None = None, metadata: dict[str, Any] | None = None, occurred_at: str | None = None, observed_at: str | None = None) -> Any:
         return self._request(
             "POST",
