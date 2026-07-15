@@ -223,6 +223,17 @@ def _narrative_text(
     return " ".join(pieces)
 
 
+
+def _badge(status: VerificationStatus) -> tuple[str, str, int]:
+    badges = {
+        VerificationStatus.verified: ("✅ Verified", "green", 1),
+        VerificationStatus.attested: ("🟡 Attested", "yellow", 2),
+        VerificationStatus.inferred: ("🔵 Inferred", "blue", 3),
+        VerificationStatus.self_reported: ("⚪ Self reported", "gray", 4),
+        VerificationStatus.unverified: ("⚫ Unverified", "black", 5),
+    }
+    return badges[status]
+
 def build_evidence_timeline(signals: list[ExecutionSignal]) -> dict:
     ordered = sorted(signals, key=lambda signal: signal.observed_at)
     return {
@@ -233,6 +244,9 @@ def build_evidence_timeline(signals: list[ExecutionSignal]) -> dict:
                 "category": signal.kind.value,
                 "why_it_matters": signal.investor_translation or _timeline_reason(signal),
                 "verification_status": signal.verification_status.value,
+                "verification_badge": _badge(signal.verification_status)[0],
+                "badge_color": _badge(signal.verification_status)[1],
+                "trust_rank": _badge(signal.verification_status)[2],
                 "source": signal.source,
                 "signal_id": signal.id,
             }

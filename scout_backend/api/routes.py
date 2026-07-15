@@ -6,13 +6,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from scout_backend.api.deps import require_startup
-from scout_backend.api.schemas import AuditLogOut, EvidenceTimeline, ExecutionNarrative, FounderDashboard, GitHubRepositoryIn, InvestorDashboard, ScoreOut, SecurityInventory, SignalIn, SignalOut, StartupCreate, StartupCreated
+from scout_backend.api.schemas import AuditLogOut, EvidenceTimeline, ExecutionNarrative, FounderDashboard, GitHubRepositoryIn, GitHubRepositoryUrlIn, IntegrationPanel, InvestorDashboard, ScoreOut, SecurityInventory, SignalIn, SignalOut, StartupCreate, StartupCreated
 from scout_backend.core.security import generate_api_key
 from scout_backend.models.database import get_db
 from scout_backend.models.entities import ApiKey, AuditAction, AuditLog, ExecutionSignal, Startup, VerificationStatus
 from scout_backend.services.audit import write_audit_log
 from scout_backend.services.dashboard import build_founder_dashboard, build_investor_dashboard
 from scout_backend.services.github import fetch_public_repo_signals
+from scout_backend.services.integrations import founder_sdk_snippets, parse_github_repo_url
 from scout_backend.services.reasoning import build_evidence_timeline, build_execution_narrative
 from scout_backend.services.scoring import build_score, translate_signal
 
@@ -135,6 +136,23 @@ async def ingest_github_repo(payload: GitHubRepositoryIn, startup: Startup = Dep
     }
 
 
+@router.post("/connectors/github/repository-url", tags=["connectors"])
+async def ingest_github_repo_url(
+    payload: GitHubRepositoryUrlIn,
+    startup: Startup = Depends(require_startup),
+    db: Session = Depends(get_db),
+):
+    try:
+        owner, repo = parse_github_repo_url(payload.repo_url)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+    return await ingest_github_repo(
+        GitHubRepositoryIn(owner=owner, repo=repo, branch=payload.branch),
+        startup=startup,
+        db=db,
+    )
+
+
 @router.get("/investor-report", response_model=ScoreOut, tags=["investor reporting"])
 def investor_report(startup: Startup = Depends(require_startup), db: Session = Depends(get_db)):
     signals = db.scalars(select(ExecutionSignal).where(ExecutionSignal.startup_id == startup.id).order_by(ExecutionSignal.occurred_at)).all()
@@ -252,6 +270,43 @@ def data_inventory(startup: Startup = Depends(require_startup), db: Session = De
                 "purpose": "Authenticate server-side integrations.",
                 "default_collection": "Generated on startup onboarding.",
                 "retention": "Hash retained until revoked or startup deleted.",
+            },
+        ],
+    )
+
+
+
+@router.get("/founder-integration-panel", response_model=IntegrationPanel, tags=["integrations"])
+def founder_integration_panel(startup: Startup = Depends(require_startup), db: Session = Depends(get_db)):
+    latest_key = db.scalars(
+        select(ApiKey)
+        .where(ApiKey.startup_id == startup.id, ApiKey.revoked_at.is_(None))
+        .order_by(ApiKey.created_at.desc())
+    ).first()
+    base_url = "https://<your-railway-domain>"
+    return IntegrationPanel(
+        api_key_prefix=latest_key.prefix if latest_key else None,
+        warning="Scout only stores the API key hash. Copy the full key when it is first created and keep it server-side only.",
+        environment_variables={"SCOUT_BASE_URL": base_url, "SCOUT_API_KEY": "scout_live_xxxxx"},
+        sdk_snippets=founder_sdk_snippets(base_url),
+        recommended_connectors=[
+            {
+                "name": "GitHub repository",
+                "status": "available_now",
+                "endpoint": "/v1/connectors/github/repository-url",
+                "why": "Creates verified product/engineering evidence without founder typing signals.",
+            },
+            {
+                "name": "Stripe webhook",
+                "status": "next_to_build",
+                "endpoint": "/api/public/hooks/stripe",
+                "why": "Revenue evidence is the highest-signal investor proof after product delivery.",
+            },
+            {
+                "name": "Vercel webhook",
+                "status": "next_to_build",
+                "endpoint": "/api/public/hooks/vercel",
+                "why": "Deployment and reliability events prove infrastructure maturity.",
             },
         ],
     )

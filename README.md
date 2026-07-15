@@ -148,3 +148,64 @@ curl "https://<your-railway-domain>/v1/security/data-inventory" \
 Railway and browsers may probe `/`, `/api`, `/api/health`, `/status`, `/ping`, and `/version`. Scout now returns friendly JSON for those paths instead of `404`, while the canonical health check remains `/health`.
 
 The GitHub connector follows GitHub redirects and returns a structured `404` or `502` error if GitHub cannot return metadata, instead of leaking an internal server error.
+
+## SDKs: easiest integration path
+
+Scout can be called with raw HTTP, but the easiest integration is the SDK. The goal is three lines of code from a secure backend, CI job, worker, or serverless function.
+
+### TypeScript
+
+```ts
+import { Scout } from "@scout/execution";
+const scout = Scout.fromEnv();
+await scout.track({ kind: "revenue", source: "stripe", name: "monthly_recurring_revenue", value: 12000, unit: "USD", verification_status: "verified" });
+```
+
+### Python
+
+```python
+from scout_execution import Scout
+scout = Scout.from_env()
+scout.track(kind="revenue", source="stripe", name="monthly_recurring_revenue", value=12000, unit="USD", verification_status="verified")
+```
+
+Set these environment variables:
+
+```bash
+SCOUT_BASE_URL=https://<your-railway-domain>
+SCOUT_API_KEY=scout_live_xxxxx
+```
+
+Never expose `SCOUT_API_KEY` in browser or mobile code. SDK calls should run from trusted server-side environments only.
+
+## Phase 1 founder integration flow
+
+The founder should not manually type signals every day. Phase 1 works like this:
+
+1. Founder opens the integration panel: `GET /v1/founder-integration-panel`.
+2. Scout shows the server-side SDK snippets and recommended connectors.
+3. Founder clicks "Connect GitHub repo" and enters a GitHub URL such as `https://github.com/tiangolo/fastapi`.
+4. The dashboard calls `POST /v1/connectors/github/repository-url`.
+5. Scout parses the repo URL, fetches GitHub metadata, stores it as verified evidence, and the evidence timeline shows a `✅ Verified` badge.
+
+Manual/custom signals still exist for unsupported systems, but they should visibly rank lower than connector evidence through verification badges.
+
+## Direct automatic monitoring
+
+If a startup wants Scout to monitor their backend automatically, they add the SDK once to their server entrypoint.
+
+TypeScript:
+
+```ts
+import { Scout } from "@scout/execution";
+Scout.monitor();
+```
+
+Python:
+
+```python
+from scout_execution import Scout
+Scout.monitor()
+```
+
+That sends `application_started`, periodic `application_heartbeat`, and unhandled `application_error` signals automatically. For business-specific proof such as revenue, customers, or manufacturing milestones, teams should still connect trusted webhooks/OAuth connectors or call `track(...)` from backend jobs where those events happen.

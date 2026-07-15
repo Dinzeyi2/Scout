@@ -59,6 +59,12 @@ def test_startup_key_signal_and_report_flow():
     timeline = c.get("/v1/evidence-timeline", headers=headers)
     assert timeline.status_code == 200
     assert timeline.json()["events"][0]["verification_status"] == "verified"
+    assert timeline.json()["events"][0]["verification_badge"] == "✅ Verified"
+
+    integration_panel = c.get("/v1/founder-integration-panel", headers=headers)
+    assert integration_panel.status_code == 200
+    assert integration_panel.json()["recommended_connectors"][0]["endpoint"] == "/v1/connectors/github/repository-url"
+    assert "Scout.fromEnv" in integration_panel.json()["sdk_snippets"]["typescript"]
 
     inventory = c.get("/v1/security/data-inventory", headers=headers)
     assert inventory.status_code == 200

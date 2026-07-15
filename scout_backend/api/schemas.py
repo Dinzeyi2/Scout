@@ -175,6 +175,9 @@ class EvidenceTimelineEvent(BaseModel):
     category: str
     why_it_matters: str
     verification_status: str
+    verification_badge: str
+    badge_color: str
+    trust_rank: int
     source: str
     signal_id: int
 
@@ -207,3 +210,17 @@ class SecurityInventory(BaseModel):
     api_key_storage: str
     audit_logging: str
     data_inventory: list[DataInventoryItem]
+
+
+class GitHubRepositoryUrlIn(BaseModel):
+    repo_url: str
+    branch: str = "main"
+
+
+class IntegrationPanel(BaseModel):
+    api_key_prefix: str | None
+    warning: str
+    environment_variables: dict[str, str]
+    sdk_snippets: dict[str, str]
+    recommended_connectors: list[dict[str, str]]
+
